@@ -396,6 +396,87 @@ def plot_field(conn, X, vals, ax=None):
     return
 
 
+def to_vtk(vtk_path, conn, X, nodal_sols={}, cell_sols={}, nodal_vecs={}, cell_vecs={}):
+    """
+    Generate a vtk given conn, X, and optionally list of nodal solutions
+
+    Args:
+        nodal_sols: dictionary of arrays of length nnodes
+        cell_sols: dictionary of arrays of length nelems
+        nodal_vecs: dictionary of list of components [vx, vy], each has length nnodes
+        cell_vecs: dictionary of list of components [vx, vy], each has length nelems
+    """
+    # vtk requires a 3-dimensional data point
+    X = np.append(X, np.zeros((X.shape[0], 1)), axis=1)
+
+    conn = np.array(conn)
+    nnodes = X.shape[0]
+    nelems = conn.shape[0]
+
+    # Create a empty vtk file and write headers
+    with open(vtk_path, "w") as fh:
+        fh.write("# vtk DataFile Version 3.0\n")
+        fh.write("my example\n")
+        fh.write("ASCII\n")
+        fh.write("DATASET UNSTRUCTURED_GRID\n")
+
+        # Write nodal points
+        fh.write("POINTS {:d} double\n".format(nnodes))
+        for x in X:
+            row = f"{x}"[1:-1]  # Remove square brackets in the string
+            fh.write(f"{row}\n")
+
+        # Write connectivity
+        size = 5 * nelems
+
+        fh.write(f"CELLS {nelems} {size}\n")
+        for c in conn:
+            node_idx = f"{c}"[1:-1]  # remove square bracket [ and ]
+            npts = 4
+            fh.write(f"{npts} {node_idx}\n")
+
+        # Write cell type
+        fh.write(f"CELL_TYPES {nelems}\n")
+        for c in conn:
+            vtk_type = 9
+            fh.write(f"{vtk_type}\n")
+
+        # Write solution
+        if nodal_sols or nodal_vecs:
+            fh.write(f"POINT_DATA {nnodes}\n")
+
+        if nodal_sols:
+            for name, data in nodal_sols.items():
+                fh.write(f"SCALARS {name} double 1\n")
+                fh.write("LOOKUP_TABLE default\n")
+                for val in data:
+                    fh.write(f"{val}\n")
+
+        if nodal_vecs:
+            for name, data in nodal_vecs.items():
+                fh.write(f"VECTORS {name} double\n")
+                for val in np.array(data).T:
+                    fh.write(f"{val[0]} {val[1]} 0.\n")
+
+        if cell_sols or cell_vecs:
+            fh.write(f"CELL_DATA {nelems}\n")
+
+        if cell_sols:
+            for name, data in cell_sols.items():
+                fh.write(f"SCALARS {name} double 1\n")
+                fh.write("LOOKUP_TABLE default\n")
+                for val in data:
+                    fh.write(f"{val}\n")
+
+        if cell_vecs:
+            for name, data in cell_vecs.items():
+                fh.write(f"VECTORS {name} double\n")
+                for val in np.array(data).T:
+                    fh.write(f"{val[0]} {val[1]} 0.\n")
+
+    return
+
+
 class JacobiSmoother:
     def __init__(self, A):
         self.diag = A.diagonal()
@@ -453,7 +534,7 @@ if __name__ == "__main__":
         ]
     )
 
-    rho = np.array([0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    x = np.array([0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0])
 
     nrefine = 5
 
@@ -465,13 +546,13 @@ if __name__ == "__main__":
     # b = B.dot(np.random.rand(B.shape[0]))
 
     for i in range(nrefine):
-        rho = helm.prolongation(rho)
-    b = helm.B[nrefine].dot(rho)
+        x = helm.prolongation(x)
+    b = helm.B[nrefine].dot(x)
 
-    x1, res_j = solve(helm.A[nrefine], b, method="jacobi")
-    x1, res_gs = solve(helm.A[nrefine], b, method="gs")
-    x1, res_mg_j = helm.solve(b, smooth_method="jacobi")
-    x1, res_mg_gs = helm.solve(b, smooth_method="gs")
+    sol_j, res_j = solve(helm.A[nrefine], b, method="jacobi")
+    sol_gs, res_gs = solve(helm.A[nrefine], b, method="gs")
+    sol_mg_j, res_mg_j = helm.solve(b, smooth_method="jacobi")
+    sol_mg_gs, res_mg_gs = helm.solve(b, smooth_method="gs")
 
     plt.semilogy(res_j, label="Jacobi", color="red")
     plt.semilogy(res_gs, label="Gauss-Seidel", color="blue")
@@ -480,7 +561,20 @@ if __name__ == "__main__":
     plt.legend()
 
     fig, axs = plt.subplots(figsize=(9.6, 4.8), nrows=1, ncols=2)
-    plot_field(helm.conn[nrefine], helm.X[nrefine], rho, ax=axs[0])
-    plot_field(helm.conn[nrefine], helm.X[nrefine], x1, ax=axs[1])
+    plot_field(helm.conn[nrefine], helm.X[nrefine], x, ax=axs[0])
+    plot_field(helm.conn[nrefine], helm.X[nrefine], sol_mg_gs, ax=axs[1])
 
     plt.show()
+
+    to_vtk(
+        "sol.vtk",
+        conn=helm.conn[nrefine],
+        X=helm.X[nrefine],
+        nodal_sols={
+            "input": x,
+            "jacobi": sol_j,
+            "gs": sol_gs,
+            "mg_jacobi": sol_mg_j,
+            "mg_gs": sol_mg_gs,
+        },
+    )
