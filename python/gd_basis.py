@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pylab as plt
 
+
 def get_stencil(k, p, inter):
     n = len(inter) - 1
 

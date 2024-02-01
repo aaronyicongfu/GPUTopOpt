@@ -47,6 +47,80 @@ def lagrange_polynomials_2d(xs1, xs2):
     return funcs
 
 
+def polynomials_fit_1d(p, pts):
+    """
+    Args:
+        p: polynomial degree
+        pts: list of x-coordinates
+    """
+    Nk = len(pts)
+    Np = 1 + p
+    if Nk != Np:
+        print("Nk != Np (%d, %d), can't invert Vk" % (Nk, Np))
+
+    Vk = np.zeros((Nk, Np))
+    for j in range(Np):
+        Vk[:, j] = pts**j
+
+    Ck = np.linalg.inv(Vk)
+
+    funcs = []
+    for i in range(Nk):
+
+        def phi(x, i=i):
+            ret = 0.0
+            for j in range(Np):
+                ret += Ck[j, i] * x**j
+            return ret
+
+        funcs.append(phi)
+    return funcs
+
+
+def polynomials_fit_2d(p, pts):
+    """
+    Args:
+        p: polynomial order along one dimension
+        pts: list of pts
+    """
+
+    Nk = len(pts)
+    Np_1d = 1 + p
+    Np = Np_1d**2
+    if Nk != Np:
+        print("Nk != Np (%d, %d), can't invert Vk" % (Nk, Np))
+
+    Vk = np.zeros((Nk, Np))
+    for i, xy in enumerate(pts):
+        x = xy[0]
+        y = xy[1]
+        xpows = [x**j for j in range(Np_1d)]
+        ypows = [y**j for j in range(Np_1d)]
+        for j in range(Np_1d):
+            for k in range(Np_1d):
+                idx = j * Np_1d + k
+                Vk[i, idx] = xpows[j] * ypows[k]
+
+    Ck = np.linalg.inv(Vk)
+
+    funcs = []
+    for i in range(Nk):
+
+        def phi(x, y, i=i):
+            xpows = [x**j for j in range(Np_1d)]
+            ypows = [y**j for j in range(Np_1d)]
+            ret = 0.0
+            for j in range(Np_1d):
+                for k in range(Np_1d):
+                    idx = j * Np_1d + k
+                    ret += Ck[idx, i] * xpows[j] * ypows[k]
+            return ret
+
+        funcs.append(phi)
+
+    return funcs
+
+
 def get_gd_shape_fun_1d(p=3):
     """
     Return:
@@ -172,9 +246,60 @@ def demo_plot_high_order_2d_gd_shape_function(p=3):
     return
 
 
+def demo_poly_fit_1d(p=3):
+    xs = np.linspace(0, p, p + 1)
+    funcs_lag = lagrange_polynomials_1d(xs)
+    funcs_fit = polynomials_fit_1d(p, xs)
+
+    x = np.linspace(0, p, 201)
+
+    fig, ax = plt.subplots(ncols=2, figsize=(9.6, 4.8))
+    for i, fun in enumerate(funcs_lag):
+        ax[0].plot(x, fun(x), label="basis %d" % i)
+
+    for i, fun in enumerate(funcs_fit):
+        ax[1].plot(x, fun(x), label="basis %d" % i)
+
+    ax[0].set_title("Lagrange polynomials")
+    ax[1].set_title("Polynomials by fit")
+
+    ax[0].legend()
+    ax[1].legend()
+    ax[0].grid()
+    ax[1].grid()
+    plt.show()
+    return
+
+
+def demo_poly_fit_2d(p=3, i=0, j=0):
+    pts = list(range(p + 1))
+    funcs_lag = lagrange_polynomials_2d(pts, pts)
+
+    pts2 = [(i, j) for i in range(p + 1) for j in range(p + 1)]
+    # pts2[-1] = (pts2[-1][0] + 1, pts2[-1][1] + 1)
+    funcs_fit = polynomials_fit_2d(p, pts2)
+
+    x = np.linspace(0, p, 201)
+    y = np.linspace(0, p, 201)
+    x, y = np.meshgrid(x, y)
+
+    fig, ax = plt.subplots(ncols=2, figsize=(9.6, 4.8))
+    ax[0].contour(x, y, funcs_lag[i][j](x, y), levels=100)
+    ax[1].contour(x, y, funcs_fit[(p + 1) * i + j](x, y), levels=100)
+
+    ax[0].set_title("Lagrange polynomials (%d, %d)" % (i, j))
+    ax[1].set_title("Polynomials by fit")
+
+    plt.show()
+
+    return
+
+
 if __name__ == "__main__":
-    # demo_plot_1d_lagrange_polys(p=5)
-    # demo_plot_2d_lagrange_polys(p=5, i=3, j=3)
-    # demo_plot_high_order_1d_gd_shape_function(p=7)
-    demo_plot_high_order_2d_gd_shape_function(p=3)
+    # demo_plot_1d_lagrange_polys(p=4)
+    # demo_plot_2d_lagrange_polys(p=2, i=0, j=0)
+    # demo_plot_high_order_1d_gd_shape_function(p=5)
+    # demo_plot_high_order_2d_gd_shape_function(p=3)
+    # demo_poly_fit_1d(p=3)
+    demo_poly_fit_2d(p=3, i=0, j=0)
     pass
